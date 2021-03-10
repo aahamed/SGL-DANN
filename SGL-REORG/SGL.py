@@ -1,6 +1,8 @@
 import torch
 import utils
+import logging
 from torch import nn
+
 
 class SGL( object ):
     '''
@@ -25,6 +27,18 @@ class SGL( object ):
             self.loss_meter.append( utils.AverageMeter() )
             self.top1_meter.append( utils.AverageMeter() )
             self.top5_meter.append( utils.AverageMeter() )
+
+    def to( self, device ):
+        for i in range( self.N ):
+            self.models[ i ] = self.models[ i ].to( device )
+
+    def train( self ):
+        for i in range( self.N ):
+            self.models[ i ].train()
+
+    def eval( self ):
+        for i in range( self.N ):
+            self.models[ i ].eval()
 
     def __call__( self, x ):
         return self.forward( x )
@@ -62,17 +76,24 @@ class SGL( object ):
             acc1, acc5 = utils.accuracy( outputs[i],
                     labels, topk=(1,5) )
             self.top1_meter[i].update( acc1.item(), batch_size )
-            self.top5_meter[i].udpate( acc5.item(), batch_size )
+            self.top5_meter[i].update( acc5.item(), batch_size )
         # top1 = [ m.avg for m in top1_meter ]
         # top5 = [ m.avg for m in top5_meter ]
         # return top1, top5
 
     def log_stats( self, prefix, step ):
         for i in range( self.N ):
-            loss = loss_meter[i].avg
-            top1 = top1_meter[i].avg
-            top5 = top5_meter[i].avg
-            print( f'{prefix} model {i} {step:03d} {loss:.3e} ' +
-                    f'{top1:.3f} {top5:.3f}' )
+            loss = self.loss_meter[i].avg
+            top1 = self.top1_meter[i].avg
+            top5 = self.top5_meter[i].avg
+            stats_str = f'{prefix} model {i} {step:03d} {loss:.3e} ' + \
+                    f'{top1:.3f} {top5:.3f}'
+            logging.info( stats_str )
+
+    def reset_stats( self ):
+        for i in range( self.N ):
+            self.loss_meter[i].reset()
+            self.top1_meter[i].reset()
+            self.top5_meter[i].reset()
 
 

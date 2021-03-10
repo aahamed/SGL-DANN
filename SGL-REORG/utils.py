@@ -5,11 +5,12 @@ import shutil
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 
-
 class AverageMeter(object):
 
   def __init__(self):
-    self.reset()
+    self.avg = 0
+    self.sum = 0
+    self.cnt = 0
 
   def reset(self):
     self.avg = 0

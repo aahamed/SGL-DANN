@@ -47,7 +47,7 @@ parser.add_argument('--arch_weight_decay', type=float,
 
 # new hyperparams.
 parser.add_argument('--weight_lambda', type=float, default=1.0)
-parser.add_argument('--pretrain_steps', type=int, default=15)
+parser.add_argument('--pretrain_steps', type=int, default=0)
 args = parser.parse_args()
 
 # Main Driver for your code. Either run `python main.py` which will run the experiment with default config
@@ -60,4 +60,4 @@ if __name__ == "__main__":
     print("Running Experiment: ", exp_name)
     exp = Experiment(args)
     exp.run()
-    exp.test()
+    # exp.test()
