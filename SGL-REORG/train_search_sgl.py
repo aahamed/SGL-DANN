@@ -22,7 +22,7 @@ parser.add_argument('--epochs', type=int, default=45,
                     help='num of training epochs')
 parser.add_argument('--init_channels', type=int,
                     default=16, help='num of init channels')
-parser.add_argument('--layers', type=int, default=8,
+parser.add_argument('--layers', type=int, default=4,
                     help='total number of layers')
 parser.add_argument('--model_path', type=str,
                     default='saved_models', help='path to save the model')
@@ -50,12 +50,13 @@ parser.add_argument('--weight_lambda', type=float, default=1.0)
 parser.add_argument('--pretrain_steps', type=int, default=0)
 args = parser.parse_args()
 
+assert args.unrolled == False and '--unrolled not supported!'
+assert args.train_portion == 0.5 and '--train_portion not supported!'
+
+
 # Main Driver for your code. Either run `python main.py` which will run the experiment with default config
 # or specify the configuration by running `python main.py custom`
 if __name__ == "__main__":
-    #exp_name = 'default'
-    #if len(sys.argv) > 1:
-    #    exp_name = sys.argv[1]
     exp_name = args.save
     print("Running Experiment: ", exp_name)
     exp = Experiment(args)

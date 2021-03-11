@@ -14,7 +14,8 @@ from file_utils import *
 from model_factory import get_model, \
         get_optimizers, get_schedulers
 from dataset import get_dataloaders
-from SGL import SGL
+from SGL import SGL, SGLStats
+from architect_coop import ArchitectSGL
 
 def softXEnt(input, target):
     logprobs = F.log_softmax(input, dim=1)
@@ -22,9 +23,6 @@ def softXEnt(input, target):
 
 class Experiment(object):
     def __init__(self, args):
-        #config_data = read_file_in_dir('./', name + '.json')
-        #if config_data is None:
-        #    raise Exception("Configuration file doesn't exist: ", name)
         # import pdb; pdb.set_trace()
         self.args = args
         self.name = args.save
@@ -52,10 +50,20 @@ class Experiment(object):
 
         # learner group for weights V_k
         self.sgl_pretrain = SGL( self.models_pretrain,
-                self.optimizers_pretrain, self.criterion, self.args )
+                self.optimizers_pretrain, self.schedulers_pretrain,
+                self.criterion, self.experiment_dir, self.args )
         # learner group for weights W_k
-        self.sgl = SGL( self.models,
-                self.optimizers, self.criterion, self.args )
+        self.sgl = SGL( self.models, self.optimizers,
+                self.schedulers, self.criterion, 
+                self.experiment_dir, self.args )
+        # architect uses weights W_k
+        self.architect = ArchitectSGL( self.sgl, args )
+
+        # stats
+        self.train_stats = SGLStats( self.sgl, 'train',
+                self.experiment_dir )
+        self.val_stats = SGLStats( self.sgl, 'validation',
+                self.experiment_dir )
 
         self.init_model()
 
@@ -85,7 +93,14 @@ class Experiment(object):
             #state_dict = torch.load(os.path.join(self.experiment_dir, 'latest_model.pt'))
             #self.model.load_state_dict(state_dict['model'])
             #self.optimizer.load_state_dict(state_dict['optimizer'])
-            pass
+            self.train_stats.read_stats_from_dir()
+            self.val_stats.read_stats_from_dir()
+            load_path = self.experiment_dir
+            load_name = 'latest_model_pretrain'
+            self.sgl_pretrain.load_models( load_name )
+            load_name = 'latest_model'
+            self.sgl.load_models( load_name )
+            self.current_epoch = self.train_stats.current_epoch()
         else:
             os.makedirs(self.experiment_dir)
         self.setup_logger()
@@ -94,29 +109,36 @@ class Experiment(object):
         self.criterion.to( DEVICE )
         self.sgl_pretrain.to( DEVICE )
         self.sgl.to( DEVICE )
-        # TODO: send models to device
 
+    # main loop
     def run(self):
         start_epoch = self.current_epoch
+        self.sgl.log_genotype()
         for epoch in range(start_epoch, self.epochs):  # loop over the dataset multiple times
+            self.log( 'Starting Epoch: {epoch}' )
             start_time = datetime.now()
             self.current_epoch = epoch
             self.train( epoch )
-            self.val()
-            #self.record_stats(train_loss, val_loss)
-            #self.log_epoch_stats(start_time)
-            #self.save_model()
+            self.train_stats.log_last_stats()
+            self.sgl_pretrain.schedulers_step()
+            if epoch >= self.args.pretrain_steps:
+                self.sgl.log_genotype()
+                self.sgl.schedulers_step()
+                self.val()
+                self.val_stats.log_last_stats()
+            self.record_stats()
+            self.log_epoch_stats(start_time)
+            self.save_model()
 
     # Perform one training iteration on the whole dataset and return loss value
     def train( self, epoch ):
         self.sgl.reset_stats()
         self.sgl_pretrain.reset_stats()
-        # TODO: set model train
         self.sgl.train()
         self.sgl_pretrain.train()
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         lbda = self.args.weight_lambda
-        N = len( self.train_queue )
+        N = len( self.train_queue ) // 1
         train_queue_iter = iter( self.train_queue )
         ul_queue_iter = iter( self.ul_queue )
         val_queue_iter = iter( self.val_queue )
@@ -177,7 +199,6 @@ class Experiment(object):
             # get loss for training data
             outputs = self.sgl( train_images )
             losses = self.sgl.loss( outputs, train_labels )
-
             # optimize
             total_loss = sum( losses ) + lbda * sum( pseudo_losses )
             total_loss.backward()
@@ -186,7 +207,11 @@ class Experiment(object):
             self.sgl.accuracy( outputs, train_labels )
             if step % self.args.report_freq == 0:
                 self.sgl.log_stats( prefix='train', step=step )
-            
+
+            # STAGE 3: Architecture Search
+            self.architect.step( val_images, val_labels )
+        
+        self.train_stats.update_stats()
 
 
     # Perform one Pass on the validation set and return loss value.
@@ -194,7 +219,7 @@ class Experiment(object):
         self.sgl_pretrain.eval()
         self.sgl.eval()
         val_loss = 0
-        N = len( self.val_queue )
+        N = len( self.val_queue ) // 1
         val_queue_iter = iter( self.val_queue )
         with torch.no_grad():
             for step in range( N ):
@@ -203,10 +228,12 @@ class Experiment(object):
                         val_labels.to( DEVICE )
                 outputs = self.sgl( val_images )
                 losses = self.sgl.loss( outputs, val_labels )
-                self.sgl.accuracy()
+                self.sgl.accuracy( outputs, val_labels )
                 # log stats
                 if step % self.args.report_freq == 0:
                     self.sgl.log_stats( prefix='validation', step=step )
+        
+        self.val_stats.update_stats()
 
 
     def test(self):
@@ -225,37 +252,31 @@ class Experiment(object):
         return test_loss
 
     def save_model(self):
-        root_model_path = os.path.join(self.experiment_dir, 'latest_model.pt')
-        model_dict = self.model.state_dict()
-        state_dict = {'model': model_dict, 'optimizer': self.optimizer.state_dict()}
-        torch.save(state_dict, root_model_path)
+        save_name = 'latest_model_pretrain'
+        self.sgl_pretrain.save_models( save_name )
+        save_name = 'latest_model'
+        self.sgl.save_models( save_name )
 
-    def record_stats(self, train_loss, val_loss):
-        self.training_losses.append(train_loss)
-        self.val_losses.append(val_loss)
+    def record_stats( self ):
+        self.train_stats.write_stats_to_dir()
+        self.val_stats.write_stats_to_dir()
+        #self.training_losses.append(train_loss)
+        #self.val_losses.append(val_loss)
+        #self.plot_stats()
+        #write_to_file_in_dir(self.experiment_dir, 'training_losses.txt', self.training_losses)
+        #write_to_file_in_dir(self.experiment_dir, 'val_losses.txt', self.val_losses)
 
-        self.plot_stats()
-
-        write_to_file_in_dir(self.experiment_dir, 'training_losses.txt', self.training_losses)
-        write_to_file_in_dir(self.experiment_dir, 'val_losses.txt', self.val_losses)
-
-    def log(self, log_str, file_name=None):
+    def log( self, log_str ):
         logging.info( log_str )
-        #print(log_str)
-        #log_to_file_in_dir(self.experiment_dir, 'all.log', log_str)
-        #if file_name is not None:
-        #    log_to_file_in_dir(self.experiment_dir, file_name, log_str)
 
     def log_epoch_stats(self, start_time):
         time_elapsed = datetime.now() - start_time
         time_to_completion = time_elapsed * (self.epochs - self.current_epoch - 1)
-        train_loss = self.training_losses[self.current_epoch]
-        val_loss = self.val_losses[self.current_epoch]
-        summary_str = "Epoch: {}, Train Loss: {}, Val Loss: {}, Took {}, ETA: {}\n"
+        summary_str = "Epoch: {}, Took {}, ETA: {}\n"
         summary_str = summary_str.format(self.current_epoch + 1,
-                train_loss, val_loss, str(time_elapsed),
+                str(time_elapsed),
                 str(time_to_completion))
-        self.log(summary_str, 'epoch.log')
+        self.log( summary_str )
 
     def plot_stats(self):
         e = len(self.training_losses)

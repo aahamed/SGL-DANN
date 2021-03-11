@@ -89,17 +89,17 @@ def get_dataloaders( args ):
     train_queue = torch.utils.data.DataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-      pin_memory=True, num_workers=2 )
+      pin_memory=True, num_workers=4 )
 
     unlabeled_queue = torch.utils.data.DataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-      pin_memory=True, num_workers=2 )
+      pin_memory=True, num_workers=4 )
 
     valid_queue = torch.utils.data.DataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(
           indices[split:num_train]),
-      pin_memory=True, num_workers=2 )
+      pin_memory=True, num_workers=4 )
 
     return train_queue, unlabeled_queue, valid_queue

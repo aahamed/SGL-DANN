@@ -1,7 +1,9 @@
 import torch
 import utils
 import logging
+import os
 from torch import nn
+from file_utils import *
 
 
 class SGL( object ):
@@ -12,10 +14,12 @@ class SGL( object ):
     '''
 
     def __init__( self, models, optimizers,
-            criterion, args ):
+            schedulers, criterion, exp_dir, args ):
         self.models = models
         self.optimizers = optimizers
+        self.schedulers = schedulers
         self.criterion = criterion
+        self.exp_dir = exp_dir
         self.args = args
         self.N = len( models )
         self.outputs = []
@@ -42,6 +46,9 @@ class SGL( object ):
 
     def __call__( self, x ):
         return self.forward( x )
+
+    def __len__( self ):
+        return len( self.models )
 
     def zero_grad( self ):
         for i in range( self.N ):
@@ -96,4 +103,79 @@ class SGL( object ):
             self.top1_meter[i].reset()
             self.top5_meter[i].reset()
 
+    def log_genotype( self ):
+        for i in range( self.N ):
+            logging.info( f'genotype {i} = {self.models[i].genotype()}' )
+
+    def schedulers_step( self ):
+        for i in range( self.N ):
+            self.schedulers[i].step()
+
+    def save_models( self, save_name ):
+        for i in range( self.N ):
+            save_path = os.path.join( self.exp_dir, f'{save_name}_{i}.pt' )
+            model_dict = self.models[i].state_dict()
+            opt_dict = self.optimizers[i].state_dict()
+            state_dict = {'model': model_dict, 'optimizer': opt_dict}
+            torch.save(state_dict, save_path)
+
+    def load_models( self, load_name ):
+        for i in range( self.N ):
+            load_path = os.path.join( self.exp_dir, f'{load_name}_{i}.pt' )
+            state_dict = torch.load( load_path )
+            self.models[i].load_state_dict( state_dict['model'] )
+            self.optimizers[i].load_state_dict( state_dict['optimizer'] )
+
+class SGLStats( object ):
+    '''
+    Class to keep track of loss and accuracy stats
+    associated with a small group of learners
+    '''
+
+    def __init__( self, sgl, stat_type, exp_dir ):
+        self.sgl = sgl
+        self.N = sgl.N
+        self.stat_type = stat_type
+        self.exp_dir = exp_dir
+        self.losses = [ [] for _ in range( self.N ) ]    
+        self.top1 = [ [] for _ in range( self.N ) ]
+        self.top5 = [ [] for _ in range( self.N ) ]
+
+    def update_losses( self ):
+        for i in range( self.N ):
+            self.losses[i].append( self.sgl.loss_meter[i].avg )
+
+    def update_accuracy( self ):
+        for i in range( self.N ):
+            self.top1[i].append( self.sgl.top1_meter[i].avg )
+            self.top5[i].append( self.sgl.top5_meter[i].avg )
+
+    def update_stats( self ):
+        self.update_losses()
+        self.update_accuracy()
+
+    def log_last_stats( self ):
+        prefix = self.stat_type
+        for i in range( self.N ):
+            loss = self.losses[i][-1]
+            top1 = self.top1[i][-1]
+            top5 = self.top5[i][-1]
+            stat_str = f'{prefix} model {i} avg: {loss:.3e} {top1:.3f} ' +\
+                    f'{top5:.3f}'
+            logging.info( stat_str )
+
+    def write_stats_to_dir( self ):
+        prefix = self.stat_type
+        for i in range( self.N ):
+            fname = f'{prefix}_losses_{i}.txt'
+            write_to_file_in_dir( self.exp_dir, fname, self.losses[i] )
+    
+    def read_stats_from_dir( self ):
+        prefix = self.stat_type
+        for i in range( self.N ):
+            fname = f'{prefix}_losses_{i}.txt'
+            self.losses[i] = read_file_in_dir( self.exp_dir, fname )
+
+    def current_epoch( self ):
+        return len( self.losses[0] )
 
