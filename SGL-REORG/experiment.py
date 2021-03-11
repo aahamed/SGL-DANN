@@ -23,7 +23,6 @@ def softXEnt(input, target):
 
 class Experiment(object):
     def __init__(self, args):
-        # import pdb; pdb.set_trace()
         self.args = args
         self.name = args.save
         self.experiment_dir = os.path.join(ROOT_STATS_DIR, self.name)
@@ -84,15 +83,6 @@ class Experiment(object):
         os.makedirs(ROOT_STATS_DIR, exist_ok=True)
 
         if os.path.exists(self.experiment_dir):
-            # TODO: activate reload code
-            #self.training_losses = read_file_in_dir(self.experiment_dir,
-            #        'training_losses.txt')
-            #self.val_losses = read_file_in_dir(self.experiment_dir,
-            #        'val_losses.txt')
-            #self.current_epoch = len(self.training_losses)
-            #state_dict = torch.load(os.path.join(self.experiment_dir, 'latest_model.pt'))
-            #self.model.load_state_dict(state_dict['model'])
-            #self.optimizer.load_state_dict(state_dict['optimizer'])
             self.train_stats.read_stats_from_dir()
             self.val_stats.read_stats_from_dir()
             load_path = self.experiment_dir
@@ -136,7 +126,6 @@ class Experiment(object):
         self.sgl_pretrain.reset_stats()
         self.sgl.train()
         self.sgl_pretrain.train()
-        # import pdb; pdb.set_trace()
         lbda = self.args.weight_lambda
         N = len( self.train_queue ) // 1
         train_queue_iter = iter( self.train_queue )
@@ -260,11 +249,6 @@ class Experiment(object):
     def record_stats( self ):
         self.train_stats.write_stats_to_dir()
         self.val_stats.write_stats_to_dir()
-        #self.training_losses.append(train_loss)
-        #self.val_losses.append(val_loss)
-        #self.plot_stats()
-        #write_to_file_in_dir(self.experiment_dir, 'training_losses.txt', self.training_losses)
-        #write_to_file_in_dir(self.experiment_dir, 'val_losses.txt', self.val_losses)
 
     def log( self, log_str ):
         logging.info( log_str )

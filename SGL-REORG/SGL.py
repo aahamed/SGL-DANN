@@ -84,9 +84,6 @@ class SGL( object ):
                     labels, topk=(1,5) )
             self.top1_meter[i].update( acc1.item(), batch_size )
             self.top5_meter[i].update( acc5.item(), batch_size )
-        # top1 = [ m.avg for m in top1_meter ]
-        # top5 = [ m.avg for m in top5_meter ]
-        # return top1, top5
 
     def log_stats( self, prefix, step ):
         for i in range( self.N ):
