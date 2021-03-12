@@ -113,6 +113,7 @@ class Experiment(object):
         self.sgl.log_genotype()
         for epoch in range(start_epoch, self.epochs):  # loop over the dataset multiple times
             self.log( f'Starting Epoch: {epoch}' )
+            self.sgl.log_stats_header()
             start_time = datetime.now()
             self.current_epoch = epoch
             self.train( epoch )
@@ -120,7 +121,7 @@ class Experiment(object):
             if epoch >= self.args.pretrain_steps:
                 self.train_stats.log_last_stats()
                 self.sgl.log_genotype()
-                self.sgl.schedulers_step()
+                #self.sgl.schedulers_step()
                 self.val()
                 self.val_stats.log_last_stats()
             self.record_stats()
@@ -135,7 +136,7 @@ class Experiment(object):
         self.sgl.train()
         self.sgl_pretrain.train()
         lbda = self.args.weight_lambda
-        N = min( len( self.src_train_queue ), len( self.tgt_train_queue ) ) // 8
+        N = min( len( self.src_train_queue ), len( self.tgt_train_queue ) ) // 1
         src_train_queue_iter = iter( self.src_train_queue )
         src_ul_queue_iter = iter( self.src_ul_queue )
         src_val_queue_iter = iter( self.src_val_queue )
@@ -154,7 +155,7 @@ class Experiment(object):
             src_train_images, src_train_labels = next( src_train_queue_iter )
             src_ul_images, _ = next( src_ul_queue_iter )
             src_val_images, src_val_labels = next( src_val_queue_iter )
-            batch_size = len( src_train_images )
+            src_batch_size = len( src_train_labels )
             src_train_images, src_train_labels, src_ul_images, src_val_images, \
                     src_val_labels = src_train_images.to( DEVICE ), \
                     src_train_labels.to( DEVICE ), src_ul_images.to( DEVICE ), \
@@ -167,12 +168,14 @@ class Experiment(object):
                     tgt_val_labels = tgt_train_images.to( DEVICE ), \
                     tgt_train_labels.to( DEVICE ), tgt_ul_images.to( DEVICE ), \
                     tgt_val_images.to( DEVICE ), tgt_val_labels.to( DEVICE )
+            tgt_batch_size = len( tgt_train_labels )
             
             # STAGE 1: Update weights V_k of each learner
             # using the training data
 
             # feed src data
-            src_domain = torch.zeros( batch_size ).long().to( DEVICE )
+            # import pdb; pdb.set_trace()
+            src_domain = torch.zeros( src_batch_size ).long().to( DEVICE )
             src_labels_out, src_domain_out = \
                     self.sgl_pretrain( src_train_images, alpha )
             src_label_losses = self.sgl_pretrain.label_loss( 
@@ -180,8 +183,8 @@ class Experiment(object):
             src_domain_losses = self.sgl_pretrain.domain_loss(
                     src_domain_out, src_domain )
             # feed tgt data
-            tgt_domain = torch.ones( batch_size ).long().to( DEVICE )
-            _, tgt_domain_out = self.sgl_pretrain( tgt_train_images, alpha )
+            tgt_domain = torch.ones( tgt_batch_size ).long().to( DEVICE )
+            tgt_labels_out, tgt_domain_out = self.sgl_pretrain( tgt_train_images, alpha )
             tgt_domain_losses = self.sgl_pretrain.domain_loss(
                     tgt_domain_out, tgt_domain )
             # optimize
@@ -192,6 +195,7 @@ class Experiment(object):
             self.sgl_pretrain.optimize()
             # update stats
             self.sgl_pretrain.accuracy( src_labels_out, src_train_labels )
+            self.sgl_pretrain.tgt_accuracy( tgt_labels_out, tgt_train_labels )
             if step % self.args.report_freq == 0 and \
                     epoch < self.args.pretrain_steps:
                 self.sgl_pretrain.log_stats( prefix='pretrain', step=step )
@@ -232,7 +236,7 @@ class Experiment(object):
             ul_domain_loss = sum( ul_src_domain_loss ) + sum( ul_tgt_domain_loss )
             # get loss for training data
             src_labels_out, src_domain_out = self.sgl( src_train_images, alpha )
-            _, tgt_domain_out = self.sgl( tgt_train_images, alpha )
+            tgt_labels_out, tgt_domain_out = self.sgl( tgt_train_images, alpha )
             src_label_loss = self.sgl.label_loss( src_labels_out, src_train_labels )
             src_domain_loss = self.sgl.domain_loss( src_domain_out, src_domain )
             tgt_domain_loss = self.sgl.domain_loss( tgt_domain_out, tgt_domain )
@@ -244,7 +248,9 @@ class Experiment(object):
             self.sgl.optimize()
             # update stats
             self.sgl.accuracy( src_labels_out, src_train_labels )
+            self.sgl.tgt_accuracy( tgt_labels_out, tgt_train_labels )
             if step % self.args.report_freq == 0:
+                # import pdb; pdb.set_trace()
                 self.sgl.log_stats( prefix='train', step=step )
 
             # STAGE 3: Architecture Search
@@ -257,10 +263,12 @@ class Experiment(object):
     # Perform one Pass on the validation set and return loss value.
     def val(self):
         # import pdb; pdb.set_trace()
+        self.sgl.reset_stats()
+        self.sgl_pretrain.reset_stats()
         self.sgl_pretrain.eval()
         self.sgl.eval()
         val_loss = 0
-        N = min( len( self.src_val_queue ), len( self.tgt_val_queue ) ) // 8
+        N = min( len( self.src_val_queue ), len( self.tgt_val_queue ) ) // 1
         src_val_queue_iter = iter( self.src_val_queue )
         tgt_val_queue_iter = iter( self.tgt_val_queue )
         alpha = 1
@@ -270,21 +278,23 @@ class Experiment(object):
                 src_val_images, src_val_labels = next( src_val_queue_iter )
                 src_val_images, src_val_labels = src_val_images.to( DEVICE ), \
                         src_val_labels.to( DEVICE )
-                batch_size = len( src_val_images )
+                src_batch_size = len( src_val_images )
                 # get tgt validation data
                 tgt_val_images, tgt_val_labels = next( tgt_val_queue_iter )
                 tgt_val_images, tgt_val_labels = tgt_val_images.to( DEVICE ), \
                         tgt_val_labels.to( DEVICE )
+                tgt_batch_size = len( tgt_val_images )
                 # feed validation data
-                src_domain = torch.zeros( batch_size ).long().to( DEVICE )
+                src_domain = torch.zeros( src_batch_size ).long().to( DEVICE )
                 src_labels_out, src_domain_out = self.sgl( src_val_images, alpha )
-                tgt_domain = torch.zeros( batch_size ).long().to( DEVICE )
-                _, tgt_domain_out = self.sgl( tgt_val_images, alpha )
+                tgt_domain = torch.zeros( tgt_batch_size ).long().to( DEVICE )
+                tgt_labels_out, tgt_domain_out = self.sgl( tgt_val_images, alpha )
                 # get loss
                 self.sgl.label_loss( src_labels_out, src_val_labels )
                 self.sgl.domain_loss( src_domain_out, src_domain )
                 self.sgl.domain_loss( tgt_domain_out, tgt_domain )
                 self.sgl.accuracy( src_labels_out, src_val_labels )
+                self.sgl.tgt_accuracy( tgt_labels_out, tgt_val_labels )
                 # log stats
                 if step % self.args.report_freq == 0:
                     self.sgl.log_stats( prefix='validation', step=step )

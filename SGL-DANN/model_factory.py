@@ -53,7 +53,7 @@ def get_model(args, label_criterion, domain_criterion):
                 *arch_attrs )
     return models, models_pretrain
 
-def get_optimizers( args, models, models_pretrain ):
+def get_optimizers_sgd( args, models, models_pretrain ):
     optimizers = []
     optimizers_pretrain = []
     for i in range( len( models ) ):
@@ -67,6 +67,23 @@ def get_optimizers( args, models, models_pretrain ):
             models_pretrain[i].parameters(),
             args.learning_rate,
             momentum=args.momentum,
+            weight_decay=args.weight_decay)
+        optimizers_pretrain.append( optimizer_pretrain )
+    return optimizers, optimizers_pretrain
+
+def get_optimizers( args, models, models_pretrain ):
+    optimizers = []
+    optimizers_pretrain = []
+    lr = 1e-3
+    for i in range( len( models ) ):
+        optimizer = torch.optim.Adam(
+            models[i].parameters(),
+            lr,
+            weight_decay=args.weight_decay)
+        optimizers.append( optimizer )
+        optimizer_pretrain = torch.optim.Adam(
+            models_pretrain[i].parameters(),
+            lr,
             weight_decay=args.weight_decay)
         optimizers_pretrain.append( optimizer_pretrain )
     return optimizers, optimizers_pretrain

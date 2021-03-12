@@ -33,13 +33,19 @@ class SGL( object ):
         #self.loss_meter = []
         self.label_loss_meter = []
         self.domain_loss_meter = []
+        # accuracy on src domain
         self.top1_meter = []
         self.top5_meter = []
+        # accuracy on tgt domain
+        self.tgt_top1_meter = []
+        self.tgt_top5_meter = []
         for i in range( self.N ):
             self.label_loss_meter.append( utils.AverageMeter() )
             self.domain_loss_meter.append( utils.AverageMeter() )
             self.top1_meter.append( utils.AverageMeter() )
             self.top5_meter.append( utils.AverageMeter() )
+            self.tgt_top1_meter.append( utils.AverageMeter() )
+            self.tgt_top5_meter.append( utils.AverageMeter() )
 
     def to( self, device ):
         for i in range( self.N ):
@@ -113,6 +119,18 @@ class SGL( object ):
                     labels, topk=(1,5) )
             self.top1_meter[i].update( acc1.item(), batch_size )
             self.top5_meter[i].update( acc5.item(), batch_size )
+    
+    def tgt_accuracy( self, outputs, labels ):
+        batch_size = len( labels )
+        for i in range( self.N ):
+            acc1, acc5 = utils.accuracy( outputs[i],
+                    labels, topk=(1,5) )
+            self.tgt_top1_meter[i].update( acc1.item(), batch_size )
+            self.tgt_top5_meter[i].update( acc5.item(), batch_size )
+
+    def log_stats_header( self ):
+        header = f'xxxxx xxxxx x step label_loss domain_loss src_top1 src_top5 tgt_top1 tgt_top5'
+        logging.info( header )
 
     def log_stats( self, prefix, step ):
         for i in range( self.N ):
@@ -120,8 +138,11 @@ class SGL( object ):
             domain_loss = self.domain_loss_meter[i].avg
             top1 = self.top1_meter[i].avg
             top5 = self.top5_meter[i].avg
+            tgt_top1 = self.tgt_top1_meter[i].avg
+            tgt_top5 = self.tgt_top5_meter[i].avg
             stats_str = f'{prefix} model {i} {step:03d} {label_loss:.3e} ' + \
-                    f'{domain_loss:.3e} {top1:.3f} {top5:.3f}'
+                    f'{domain_loss:.3e} {top1:.3f} {top5:.3f} ' + \
+                    f'{tgt_top1:.3f} {tgt_top5:.3f}'
             logging.info( stats_str )
 
     def reset_stats( self ):
@@ -130,6 +151,8 @@ class SGL( object ):
             self.domain_loss_meter[i].reset()
             self.top1_meter[i].reset()
             self.top5_meter[i].reset()
+            self.tgt_top1_meter[i].reset()
+            self.tgt_top5_meter[i].reset()
 
     def log_genotype( self ):
         for i in range( self.N ):
@@ -169,6 +192,8 @@ class SGLStats( object ):
         self.domain_losses = [ [] for _ in range( self.N ) ]    
         self.top1 = [ [] for _ in range( self.N ) ]
         self.top5 = [ [] for _ in range( self.N ) ]
+        self.tgt_top1 = [ [] for _ in range( self.N ) ]
+        self.tgt_top5 = [ [] for _ in range( self.N ) ]
 
     def update_losses( self ):
         for i in range( self.N ):
@@ -179,6 +204,8 @@ class SGLStats( object ):
         for i in range( self.N ):
             self.top1[i].append( self.sgl.top1_meter[i].avg )
             self.top5[i].append( self.sgl.top5_meter[i].avg )
+            self.tgt_top1[i].append( self.sgl.tgt_top1_meter[i].avg )
+            self.tgt_top5[i].append( self.sgl.tgt_top5_meter[i].avg )
 
     def update_stats( self ):
         self.update_losses()
@@ -191,8 +218,10 @@ class SGLStats( object ):
             domain_loss = self.domain_losses[i][-1]
             top1 = self.top1[i][-1]
             top5 = self.top5[i][-1]
+            tgt_top1 = self.tgt_top1[i][-1]
+            tgt_top5 = self.tgt_top5[i][-1]
             stat_str = f'{prefix} model {i} avg: {label_loss:.3e} {domain_loss:.3e} ' +\
-                    f'{top1:.3f} {top5:.3f}'
+                    f'{top1:.3f} {top5:.3f} {tgt_top1:.3f} {tgt_top5:.3f}'
             logging.info( stat_str )
 
     def write_stats_to_dir( self ):
