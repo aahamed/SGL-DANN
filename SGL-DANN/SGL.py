@@ -4,6 +4,7 @@ import logging
 import os
 from torch import nn
 from file_utils import *
+from plot import plot_loss_acc
 
 
 class SGL( object ):
@@ -24,13 +25,6 @@ class SGL( object ):
         self.exp_dir = exp_dir
         self.args = args
         self.N = len( models )
-        self.outputs = []
-        self.label_out = []
-        self.domain_out = []
-        #self.losses = []
-        self.label_losses = []
-        self.domain_losses = []
-        #self.loss_meter = []
         self.label_loss_meter = []
         self.domain_loss_meter = []
         # accuracy on src domain
@@ -70,40 +64,31 @@ class SGL( object ):
             self.optimizers[ i ].zero_grad()
 
     def forward( self, x, alpha ):
-        self.label_out.clear()
-        self.domain_out.clear()
+        labels_out = []
+        domains_out = []
         for i in range( self.N ):
             label_out, domain_out = self.models[ i ]( x, alpha )
-            self.label_out.append( label_out )
-            self.domain_out.append( domain_out )
-        return self.label_out, self.domain_out
+            labels_out.append( label_out )
+            domains_out.append( domain_out )
+        return labels_out, domains_out
 
     def label_loss( self, label_out, labels ):
-        self.label_losses.clear()
+        label_losses = []
         batch_size = len( labels )
         for i in range( self.N ):
             loss = self.label_criterion( label_out[i], labels )
-            self.label_losses.append( loss )
+            label_losses.append( loss )
             self.label_loss_meter[i].update( loss.item(), batch_size )
-        return self.label_losses
+        return label_losses
 
     def domain_loss( self, domain_out, labels ):
-        self.domain_losses.clear()
+        domain_losses = []
         batch_size = len( labels )
         for i in range( self.N ):
             loss = self.domain_criterion( domain_out[i], labels )
-            self.domain_losses.append( loss )
+            domain_losses.append( loss )
             self.domain_loss_meter[i].update( loss.item(), batch_size )
-        return self.domain_losses
-
-    #def loss( self, outputs, labels ):
-    #    self.losses.clear()
-    #    batch_size = len( labels )
-    #    for i in range( self.N ):
-    #        loss = self.criterion( outputs[ i ], labels )
-    #        self.losses.append( loss )
-    #        self.loss_meter[ i ].update( loss.item(), batch_size )
-    #    return self.losses
+        return domain_losses
 
     def optimize( self ):
         for i in range( self.N ):
@@ -195,6 +180,14 @@ class SGLStats( object ):
         self.tgt_top1 = [ [] for _ in range( self.N ) ]
         self.tgt_top5 = [ [] for _ in range( self.N ) ]
 
+    def plot_stats( self ):
+        for i in range( self.N ):
+            prefix = f'Learner {i}'
+            fname = os.path.join( self.exp_dir,
+                    f'{self.stat_type}-loss-acc-{i}.png' )
+            plot_loss_acc( self.label_losses[i], self.domain_losses[i],
+                    self.top1[i], self.tgt_top1[i], prefix, fname )
+
     def update_losses( self ):
         for i in range( self.N ):
             self.label_losses[i].append( self.sgl.label_loss_meter[i].avg )
@@ -231,6 +224,10 @@ class SGLStats( object ):
             write_to_file_in_dir( self.exp_dir, fname, self.label_losses[i] )
             fname = f'{prefix}_domain_losses_{i}.txt'
             write_to_file_in_dir( self.exp_dir, fname, self.domain_losses[i] )
+            fname = f'{prefix}_src_acc_{i}.txt'
+            write_to_file_in_dir( self.exp_dir, fname, self.top1[i] )
+            fname = f'{prefix}_tgt_acc_{i}.txt'
+            write_to_file_in_dir( self.exp_dir, fname, self.tgt_top1[i] )
     
     def read_stats_from_dir( self ):
         prefix = self.stat_type
@@ -239,6 +236,10 @@ class SGLStats( object ):
             self.label_losses[i] = read_file_in_dir( self.exp_dir, fname )
             fname = f'{prefix}_domain_losses_{i}.txt'
             self.domain_losses[i] = read_file_in_dir( self.exp_dir, fname )
+            fname = f'{prefix}_src_acc_{i}.txt'
+            self.top1[i] = read_file_in_dir( self.exp_dir, fname )
+            fname = f'{prefix}_tgt_acc_{i}.txt'
+            self.tgt_top1[i] = read_file_in_dir( self.exp_dir, fname )
 
     def current_epoch( self ):
         return len( self.label_losses[0] )

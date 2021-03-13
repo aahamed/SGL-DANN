@@ -66,6 +66,8 @@ class Experiment(object):
         self.architect = ArchitectDA( self.sgl, args )
 
         # stats
+        self.pretrain_stats = SGLStats( self.sgl_pretrain,
+                'pretrain', self.experiment_dir )
         self.train_stats = SGLStats( self.sgl, 'train',
                 self.experiment_dir )
         self.val_stats = SGLStats( self.sgl, 'validation',
@@ -90,6 +92,7 @@ class Experiment(object):
         os.makedirs(ROOT_STATS_DIR, exist_ok=True)
 
         if os.path.exists(self.experiment_dir):
+            self.pretrain_stats.read_stats_from_dir()
             self.train_stats.read_stats_from_dir()
             self.val_stats.read_stats_from_dir()
             load_path = self.experiment_dir
@@ -97,7 +100,7 @@ class Experiment(object):
             self.sgl_pretrain.load_models( load_name )
             load_name = 'latest_model'
             self.sgl.load_models( load_name )
-            self.current_epoch = self.train_stats.current_epoch()
+            self.current_epoch = self.pretrain_stats.current_epoch()
         else:
             os.makedirs(self.experiment_dir)
         self.setup_logger()
@@ -112,16 +115,18 @@ class Experiment(object):
         start_epoch = self.current_epoch
         self.sgl.log_genotype()
         for epoch in range(start_epoch, self.epochs):  # loop over the dataset multiple times
-            self.log( f'Starting Epoch: {epoch}' )
+            self.log( f'Starting Epoch: {epoch+1}' )
             self.sgl.log_stats_header()
             start_time = datetime.now()
             self.current_epoch = epoch
             self.train( epoch )
             self.sgl_pretrain.schedulers_step()
-            if epoch >= self.args.pretrain_steps:
+            if epoch < self.args.pretrain_steps:
+                self.pretrain_stats.log_last_stats()
+            else:
                 self.train_stats.log_last_stats()
                 self.sgl.log_genotype()
-                #self.sgl.schedulers_step()
+                self.sgl.schedulers_step()
                 self.val()
                 self.val_stats.log_last_stats()
             self.record_stats()
@@ -136,7 +141,8 @@ class Experiment(object):
         self.sgl.train()
         self.sgl_pretrain.train()
         lbda = self.args.weight_lambda
-        N = min( len( self.src_train_queue ), len( self.tgt_train_queue ) ) // 1
+        N = min( len( self.src_train_queue ),
+                len( self.tgt_train_queue ) ) // 1
         src_train_queue_iter = iter( self.src_train_queue )
         src_ul_queue_iter = iter( self.src_ul_queue )
         src_val_queue_iter = iter( self.src_val_queue )
@@ -151,23 +157,15 @@ class Experiment(object):
             p = float(step + epoch * N) / self.args.epochs / N
             alpha = 2. / (1. + np.exp(-10 * p)) - 1
             
-            # get src domain data
+            # get training src domain data
             src_train_images, src_train_labels = next( src_train_queue_iter )
-            src_ul_images, _ = next( src_ul_queue_iter )
-            src_val_images, src_val_labels = next( src_val_queue_iter )
+            src_train_images, src_train_labels = src_train_images.to( DEVICE ), \
+                    src_train_labels.to( DEVICE )
             src_batch_size = len( src_train_labels )
-            src_train_images, src_train_labels, src_ul_images, src_val_images, \
-                    src_val_labels = src_train_images.to( DEVICE ), \
-                    src_train_labels.to( DEVICE ), src_ul_images.to( DEVICE ), \
-                    src_val_images.to( DEVICE ), src_val_labels.to( DEVICE ) 
-            # get tgt domain data
+            # get training tgt domain data
             tgt_train_images, tgt_train_labels = next( tgt_train_queue_iter )
-            tgt_ul_images, _ = next( tgt_ul_queue_iter )
-            tgt_val_images, tgt_val_labels = next( tgt_val_queue_iter )
-            tgt_train_images, tgt_train_labels, tgt_ul_images, tgt_val_images, \
-                    tgt_val_labels = tgt_train_images.to( DEVICE ), \
-                    tgt_train_labels.to( DEVICE ), tgt_ul_images.to( DEVICE ), \
-                    tgt_val_images.to( DEVICE ), tgt_val_labels.to( DEVICE )
+            tgt_train_images, tgt_train_labels = tgt_train_images.to( DEVICE ), \
+                tgt_train_labels.to( DEVICE )
             tgt_batch_size = len( tgt_train_labels )
             
             # STAGE 1: Update weights V_k of each learner
@@ -203,6 +201,13 @@ class Experiment(object):
             # skip STAGE2 and STAGE3 if we are in pretraining
             if epoch < self.args.pretrain_steps:
                 continue
+            
+            # get unlabeled src domain data
+            src_ul_images, _ = next( src_ul_queue_iter )
+            src_ul_images = src_ul_images.to( DEVICE )
+            # get unlabeled tgt domain data
+            tgt_ul_images, _ = next( tgt_ul_queue_iter )
+            tgt_ul_images = tgt_ul_images.to( DEVICE )
 
             # STAGE 2: Update weights W_k of each learner
             # using the pseudolabeled data from every other
@@ -254,11 +259,20 @@ class Experiment(object):
                 self.sgl.log_stats( prefix='train', step=step )
 
             # STAGE 3: Architecture Search
+            
+            # get validation src domain data
+            src_val_images, src_val_labels = next( src_val_queue_iter )
+            src_val_images, src_val_labels = src_val_images.to( DEVICE ), \
+                    src_val_labels.to( DEVICE )
+            # get validation tgt domain data
+            tgt_val_images, _ = next( tgt_val_queue_iter )
+            tgt_val_images = tgt_val_images.to( DEVICE )
+            # update architecture
             self.architect.step( src_val_images, src_val_labels,
                     tgt_val_images, alpha )
         
         self.train_stats.update_stats()
-
+        self.pretrain_stats.update_stats()
 
     # Perform one Pass on the validation set and return loss value.
     def val(self):
@@ -268,7 +282,8 @@ class Experiment(object):
         self.sgl_pretrain.eval()
         self.sgl.eval()
         val_loss = 0
-        N = min( len( self.src_val_queue ), len( self.tgt_val_queue ) ) // 1
+        N = min( len( self.src_val_queue ),
+                len( self.tgt_val_queue ) ) // 1
         src_val_queue_iter = iter( self.src_val_queue )
         tgt_val_queue_iter = iter( self.tgt_val_queue )
         alpha = 1
@@ -324,8 +339,10 @@ class Experiment(object):
         self.sgl.save_models( save_name )
 
     def record_stats( self ):
+        self.pretrain_stats.write_stats_to_dir()
         self.train_stats.write_stats_to_dir()
         self.val_stats.write_stats_to_dir()
+        self.plot_stats()
 
     def log( self, log_str ):
         logging.info( log_str )
@@ -339,14 +356,7 @@ class Experiment(object):
                 str(time_to_completion))
         self.log( summary_str )
 
-    def plot_stats(self):
-        e = len(self.training_losses)
-        x_axis = np.arange(1, e + 1, 1)
-        plt.figure()
-        plt.plot(x_axis, self.training_losses, label="Training Loss")
-        plt.plot(x_axis, self.val_losses, label="Validation Loss")
-        plt.xlabel("Epochs")
-        plt.legend(loc='best')
-        plt.title(self.name + " Stats Plot")
-        plt.savefig(os.path.join(self.experiment_dir, "stat_plot.png"))
-        plt.show()
+    def plot_stats( self ):
+        self.pretrain_stats.plot_stats()
+        self.train_stats.plot_stats()
+

@@ -53,7 +53,7 @@ def get_model(args, label_criterion, domain_criterion):
                 *arch_attrs )
     return models, models_pretrain
 
-def get_optimizers_sgd( args, models, models_pretrain ):
+def get_optimizers( args, models, models_pretrain ):
     optimizers = []
     optimizers_pretrain = []
     for i in range( len( models ) ):
@@ -71,7 +71,7 @@ def get_optimizers_sgd( args, models, models_pretrain ):
         optimizers_pretrain.append( optimizer_pretrain )
     return optimizers, optimizers_pretrain
 
-def get_optimizers( args, models, models_pretrain ):
+def get_optimizers_adam( args, models, models_pretrain ):
     optimizers = []
     optimizers_pretrain = []
     lr = 1e-3
