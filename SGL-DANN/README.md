@@ -1,10 +1,10 @@
 # Small Group Learning for Domain Adaptation
 
 * This project applies the small group learning framework to the problem of domain adaptation. In this  
-implementation each learner is an adversarial network.
+implementation each learner is an adversarial network.  
 
-SGL paper: https://arxiv.org/abs/2012.12502
-DANN paper: https://arxiv.org/abs/1409.7495
+SGL paper: https://arxiv.org/abs/2012.12502  
+DANN paper: https://arxiv.org/abs/1409.7495  
 
 ## Usage
 
@@ -16,7 +16,7 @@ DANN paper: https://arxiv.org/abs/1409.7495
 * Perform small group learning with DANN model.  
 * Note, only first order search is supported.
 ```
-python train_search_da.py --epochs=5 --pretrain_steps=2  --batch_size=32 --src_set=mnist --tgt_set=mnistm --save=my_exp
+python train_search_sgl.py --epochs=5 --pretrain_steps=2  --batch_size=32 --src_set=mnist --tgt_set=mnistm --save=my_exp
 ```
 * --save specifies the save name for this experiment
 
@@ -36,9 +36,9 @@ python train_search_da.py --epochs=5 --pretrain_steps=2  --batch_size=32 --src_s
 - functions.py: Contains the implementation of the gradient reversal layer
 
 ### Files from SGL
-- model_search_coop.py: Contains the differentiable model architectures. We integrate the DANN model by using a differentiable feature architecture  
-based on DARTS but keep the lable classifier and domain classifier as fixed feedforward network similar to the baseline DANN implementation.
-- architect_coop.py: Contains the code for architecture search. We make some minor updates here to take into account the different loss function  
+- model_search_coop.py: Contains the differentiable model architectures. We integrate the DANN model by using a differentiable architecture for the feature extractor 
+based on DARTS but keep the label classifier and domain classifier as fixed feedforward architectures similar to the baseline DANN implementation.
+- architect_coop.py: Contains the code for architecture search. We make some minor updates here to take into account the different loss function 
 used by DANN
 - utils.py: Contains utility functions. Mostly unchanged.
 - operations.py: Contains candidate operations for architecture search. Unchanged.
