@@ -8,12 +8,12 @@ import sys
 import torch.nn.functional as F
 
 from datetime import datetime
-from constants import ROOT_STATS_DIR, \
-        NUM_LEARNERS, DEVICE
+from constants import *
 from file_utils import *
 from model_factory import get_model, \
         get_optimizers, get_schedulers
-from dataset import get_dataloaders
+from dataset import get_train_dataloaders, \
+        get_test_dataloaders
 from SGL import SGL, SGLStats
 from architect_coop import ArchitectDA
 
@@ -28,12 +28,17 @@ class Experiment(object):
         self.name = args.save
         self.experiment_dir = os.path.join(ROOT_STATS_DIR, self.name)
 
-        # get dataloader for src domain
+        # get train dataloader for src domain
         self.src_train_queue, self.src_ul_queue, self.src_val_queue = \
-                get_dataloaders( args.src_set, args )
-        # get dataloader for tgt domain
+                get_train_dataloaders( args.src_set, args )
+        # get train dataloader for tgt domain
         self.tgt_train_queue, self.tgt_ul_queue, self.tgt_val_queue = \
-                get_dataloaders( args.tgt_set, args )
+                get_train_dataloaders( args.tgt_set, args )
+
+        # get test dataloader for src domain
+        self.src_test_queue = get_test_dataloaders( args.src_set, args )
+        # get test dataloader for tgt domain
+        self.tgt_test_queue = get_test_dataloaders( args.tgt_set, args )
 
 
         # Setup Experiment
@@ -71,6 +76,8 @@ class Experiment(object):
         self.train_stats = SGLStats( self.sgl, 'train',
                 self.experiment_dir )
         self.val_stats = SGLStats( self.sgl, 'validation',
+                self.experiment_dir )
+        self.test_stats = SGLStats( self.sgl, 'test',
                 self.experiment_dir )
 
         self.init_model()
@@ -120,13 +127,13 @@ class Experiment(object):
             start_time = datetime.now()
             self.current_epoch = epoch
             self.train( epoch )
-            self.sgl_pretrain.schedulers_step()
+            # self.sgl_pretrain.schedulers_step()
             if epoch < self.args.pretrain_steps:
                 self.pretrain_stats.log_last_stats()
             else:
                 self.train_stats.log_last_stats()
                 self.sgl.log_genotype()
-                self.sgl.schedulers_step()
+                # self.sgl.schedulers_step()
                 self.val()
                 self.val_stats.log_last_stats()
             self.record_stats()
@@ -135,7 +142,6 @@ class Experiment(object):
 
     # Perform one training iteration on the whole dataset and return loss value
     def train( self, epoch ):
-        # import pdb; pdb.set_trace()
         self.sgl.reset_stats()
         self.sgl_pretrain.reset_stats()
         self.sgl.train()
@@ -267,8 +273,9 @@ class Experiment(object):
             # get validation tgt domain data
             tgt_val_images, _ = next( tgt_val_queue_iter )
             tgt_val_images = tgt_val_images.to( DEVICE )
-            # update architecture
-            self.architect.step( src_val_images, src_val_labels,
+            if not IS_ARCH_FIXED():
+                # update architecture
+                self.architect.step( src_val_images, src_val_labels,
                     tgt_val_images, alpha )
         
         self.train_stats.update_stats()
@@ -318,19 +325,46 @@ class Experiment(object):
 
 
     def test(self):
-        self.sgl.eval()
+        # import pdb; pdb.set_trace()
+        self.sgl.reset_stats()
+        self.sgl_pretrain.reset_stats()
         self.sgl_pretrain.eval()
-        test_loss = 0
-        return
-
+        self.sgl.eval()
+        val_loss = 0
+        N = min( len( self.src_test_queue ),
+                len( self.tgt_test_queue ) ) // 1
+        src_test_queue_iter = iter( self.src_test_queue )
+        tgt_test_queue_iter = iter( self.tgt_test_queue )
+        alpha = 1
         with torch.no_grad():
-            for iter, (images, captions, img_ids) in enumerate(self.test_loader):
-                raise NotImplementedError()
+            for step in range( N ):
+                # get src test data
+                src_test_images, src_test_labels = next( src_test_queue_iter )
+                src_test_images, src_test_labels = src_test_images.to( DEVICE ), \
+                        src_test_labels.to( DEVICE )
+                src_batch_size = len( src_test_images )
+                # get tgt test data
+                tgt_test_images, tgt_test_labels = next( tgt_test_queue_iter )
+                tgt_test_images, tgt_test_labels = tgt_test_images.to( DEVICE ), \
+                        tgt_test_labels.to( DEVICE )
+                tgt_batch_size = len( tgt_test_images )
+                # feed test data
+                src_domain = torch.zeros( src_batch_size ).long().to( DEVICE )
+                src_labels_out, src_domain_out = self.sgl( src_test_images, alpha )
+                tgt_domain = torch.zeros( tgt_batch_size ).long().to( DEVICE )
+                tgt_labels_out, tgt_domain_out = self.sgl( tgt_test_images, alpha )
+                # get loss
+                self.sgl.label_loss( src_labels_out, src_test_labels )
+                self.sgl.domain_loss( src_domain_out, src_domain )
+                self.sgl.domain_loss( tgt_domain_out, tgt_domain )
+                self.sgl.accuracy( src_labels_out, src_test_labels )
+                self.sgl.tgt_accuracy( tgt_labels_out, tgt_test_labels )
+                # log stats
+                if step % self.args.report_freq == 0:
+                    self.sgl.log_stats( prefix='test', step=step )
         
-        result_str = "TODO"
-        self.log(result_str)
-
-        return test_loss
+        self.test_stats.update_stats()
+        self.test_stats.log_last_stats()
 
     def save_model(self):
         save_name = 'latest_model_pretrain'

@@ -23,8 +23,8 @@ parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
 parser.add_argument('--epochs', type=int, default=45,
                     help='num of training epochs')
 parser.add_argument('--init_channels', type=int,
-                    default=16, help='num of init channels')
-parser.add_argument('--layers', type=int, default=4,
+                    default=48, help='num of init channels')
+parser.add_argument('--layers', type=int, default=2,
                     help='total number of layers')
 parser.add_argument('--model_path', type=str,
                     default='saved_models', help='path to save the model')
@@ -65,4 +65,4 @@ if __name__ == "__main__":
     print("Running Experiment: ", exp_name)
     exp = Experiment(args)
     exp.run()
-    # exp.test()
+    exp.test()

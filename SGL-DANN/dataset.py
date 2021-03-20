@@ -79,9 +79,45 @@ def get_train_dataset( dataset_name, args ):
     else:
         assert False and f'Unrecognized dataset: {dataset_name}'
     return train_data
+
+def get_dataset( dataset_name, args, train=True ):
+    # import pdb; pdb.set_trace()
+    t_data = None
+    t_transform, _ = get_data_transforms( dataset_name, args )
+    if dataset_name == 'cifar100':
+        t_data = dset.CIFAR100(root=args.data, train=train, 
+                download=True, transform=t_transform)
+    elif dataset_name == 'cifar10':
+        t_data = dset.CIFAR10(root=args.data, train=train, 
+                download=True, transform=t_transform)
+    elif dataset_name == 'mnist':
+        t_data = dset.MNIST(
+            root=args.data,
+            train=train,
+            transform=t_transform,
+            download=True
+        )
+    elif dataset_name == 'mnistm':
+        mnistm_root = os.path.join( args.data, 'mnist_m' )
+        if train:
+            train_list = os.path.join(mnistm_root, 'mnist_m_train_labels.txt')
+            t_data = MnistmGetLoader(
+                data_root=os.path.join(mnistm_root, 'mnist_m_train'),
+                data_list=train_list,
+                transform=t_transform
+            )
+        else:
+            test_list = os.path.join(mnistm_root, 'mnist_m_test_labels.txt')
+            t_data = MnistmGetLoader(
+                data_root=os.path.join(mnistm_root, 'mnist_m_test'),
+                data_list=test_list,
+                transform=t_transform )
+    else:
+        assert False and f'Unrecognized dataset: {dataset_name}'
+    return t_data
     
-def get_dataloaders( dataset_name, args ):
-    train_data = get_train_dataset( dataset_name, args )
+def get_train_dataloaders( dataset_name, args ):
+    train_data = get_dataset( dataset_name, args, train=True )
     num_train = len( train_data )
     indices = list(range(num_train))
     split = int(np.floor(args.train_portion * num_train))
@@ -104,3 +140,11 @@ def get_dataloaders( dataset_name, args ):
 
     return train_queue, unlabeled_queue, valid_queue
 
+def get_test_dataloaders( dataset_name, args ):
+    test_data = get_dataset( dataset_name, args, train=False )
+
+    test_queue = torch.utils.data.DataLoader(
+        test_data, batch_size=args.batch_size,
+        shuffle=True, pin_memory=True, num_workers=8 )
+
+    return test_queue

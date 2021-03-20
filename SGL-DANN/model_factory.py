@@ -1,9 +1,9 @@
 import torch
-from constants import NUM_CLASSES, \
-        NUM_LEARNERS, DEVICE
+from constants import *
 from torch.autograd import Variable
 from torch import nn
-from model_search_coop import DANN
+from model_search_coop import DANN, DANNFixed
+from model_search_da import DANN as DANNSimple
 from genotypes import PRIMITIVES
 
 def initialize_alphas(steps=4):
@@ -37,7 +37,26 @@ def update_model_arch_attrs(
     return model
 
 # Build and return the model here based on the configuration.
-def get_model(args, label_criterion, domain_criterion):
+def get_model( args, label_criterion, domain_criterion ):
+    if IS_ARCH_FIXED():
+        return get_model_fixed()
+    elif ARCH_TYPE == 'darts-simple':
+        return get_model_darts_simple( args, label_criterion, domain_criterion )
+    else:
+        return get_model_darts( args, label_criterion, domain_criterion )
+
+# Build model with fixed feature extractor
+def get_model_fixed():
+    models = []
+    models_pretrain = []
+    for i in range( NUM_LEARNERS ):
+        models.append( DANNFixed() )
+        models_pretrain.append( DANNFixed() )
+    return models, models_pretrain
+
+
+# Build model with darts feature extractor
+def get_model_darts(args, label_criterion, domain_criterion):
     #criterion = nn.CrossEntropyLoss()
     #criterion = criterion.to( DEVICE )
     models = []
@@ -53,7 +72,24 @@ def get_model(args, label_criterion, domain_criterion):
                 *arch_attrs )
     return models, models_pretrain
 
+# Build model with simplified darts feature extractor
+def get_model_darts_simple( args, label_criterion, domain_criterion ):
+    models = []
+    models_pretrain = []
+    for i in range( NUM_LEARNERS ):
+        models.append( DANNSimple(args.init_channels,
+            NUM_CLASSES, args.layers, label_criterion, domain_criterion ) )
+        models_pretrain.append( DANNSimple(args.init_channels, 
+            NUM_CLASSES, args.layers, label_criterion, domain_criterion ) )
+    return models, models_pretrain
+
 def get_optimizers( args, models, models_pretrain ):
+    if OPTIM == 'Adam':
+        return get_optimizers_adam( args, models, models_pretrain )
+    else:
+        return get_optimizers_sgd( args, models, models_pretrain )
+
+def get_optimizers_sgd( args, models, models_pretrain ):
     optimizers = []
     optimizers_pretrain = []
     for i in range( len( models ) ):

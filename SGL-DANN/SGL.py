@@ -5,6 +5,7 @@ import os
 from torch import nn
 from file_utils import *
 from plot import plot_loss_acc
+from constants import IS_ARCH_FIXED
 
 
 class SGL( object ):
@@ -140,6 +141,9 @@ class SGL( object ):
             self.tgt_top5_meter[i].reset()
 
     def log_genotype( self ):
+        # skip for fixed architecture
+        if IS_ARCH_FIXED():
+            return
         for i in range( self.N ):
             logging.info( f'genotype {i} = {self.models[i].genotype()}' )
 
