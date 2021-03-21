@@ -23,6 +23,13 @@ class AverageMeter(object):
     self.avg = self.sum / self.cnt
 
 
+class HSVTransform(object):
+
+
+  def __call__(self, x):
+    return transforms.functional.adjust_hue(x,0)
+
+
 def accuracy(output, target, topk=(1,)):
   maxk = max(topk)
   batch_size = target.size(0)
@@ -120,6 +127,32 @@ def _data_transforms_mnistm( args ):
     return train_transform, train_transform
 
 
+def _data_transforms_cifar10_hsv(args):
+  CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
+  CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
+
+  train_transform = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+    transforms.ToPILImage(),
+    HSVTransform(),
+    transforms.ToTensor()
+  ])
+  if args.cutout:
+    train_transform.transforms.append(Cutout(args.cutout_length))
+
+  valid_transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+    transforms.ToPILImage(),
+    HSVTransform(),
+    transforms.ToTensor()
+  ])
+  return train_transform, valid_transform
+
+
 def count_parameters_in_MB(model):
   return np.sum(np.prod(v.size()) for name, v in model.named_parameters() if "auxiliary" not in name)/1e6
 
@@ -159,4 +192,6 @@ def create_exp_dir(path, scripts_to_save=None):
     for script in scripts_to_save:
       dst_file = os.path.join(path, 'scripts', os.path.basename(script))
       shutil.copyfile(script, dst_file)
+
+
 
