@@ -21,6 +21,7 @@ def IS_ARCH_FIXED():
 
 # set seed
 manual_seed = random.randint(1, 10000)
+# set following manual seed to reproduce result in report
 # manual_seed = 1768
 print( 'seed:', manual_seed )
 random.seed(manual_seed)
