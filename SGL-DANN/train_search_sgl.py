@@ -52,8 +52,8 @@ parser.add_argument('--weight_lambda', type=float, default=1.0)
 parser.add_argument('--pretrain_steps', type=int, default=0)
 args = parser.parse_args()
 
-assert args.src_set in [ 'mnist', 'mnistm' ]
-assert args.tgt_set in [ 'mnist', 'mnistm' ]
+assert args.src_set in [ 'mnist', 'mnistm', 'cifar10','cifar10_hsv' ]
+assert args.tgt_set in [ 'mnist', 'mnistm','cifar10','cifar10_hsv' ]
 assert args.unrolled == False and '--unrolled not supported!'
 assert args.train_portion == 0.5 and '--train_portion not supported!'
 

@@ -47,6 +47,8 @@ def get_data_transforms( dataset_name, args ):
         train_transform, valid_transform = utils._data_transforms_mnist(args)
     elif dataset_name == 'mnistm':
         train_transform, valid_transform = utils._data_transforms_mnistm(args)
+    elif dataset_name == 'cifar10_hsv':
+        train_transform, valid_transform = utils._data_transforms_cifar10_hsv(args)
     else:
         assert False and f'Unrecognized dataset: {dataset_name}'
     return train_transform, valid_transform
@@ -76,6 +78,9 @@ def get_train_dataset( dataset_name, args ):
             data_list=train_list,
             transform=train_transform
         )
+    elif dataset_name == 'cifar10_hsv':
+        train_data = dset.CIFAR10(root=args.data, train=True, 
+                download=True, transform=train_transform)
     else:
         assert False and f'Unrecognized dataset: {dataset_name}'
     return train_data
@@ -112,6 +117,9 @@ def get_dataset( dataset_name, args, train=True ):
                 data_root=os.path.join(mnistm_root, 'mnist_m_test'),
                 data_list=test_list,
                 transform=t_transform )
+    elif dataset_name == 'cifar10_hsv':
+        t_data = dset.CIFAR10(root=args.data, train=True, 
+                download=True, transform=t_transform)
     else:
         assert False and f'Unrecognized dataset: {dataset_name}'
     return t_data
