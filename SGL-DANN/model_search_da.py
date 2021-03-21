@@ -186,8 +186,10 @@ class NetworkFE( nn.Module ):
         # expand input to 3 channels ( this is for mnist images )
         x = x.expand(N, 3, H, W)
         # DARTS forward logic
+        weights_normal = F.softmax( self.alphas_normal, dim=1 )
+        weights_reduce = F.softmax( self.alphas_reduce, dim=1 )
         for i, cell in enumerate( self.cells ):
-            x = cell( x, self.alphas_normal, self.alphas_reduce )
+            x = cell( x, weights_normal, weights_reduce )
         x = self.global_pooling( x )
         return x
         
@@ -204,17 +206,32 @@ class NetworkFE( nn.Module ):
         self.alphas_reduce = Variable(
                 1e-3*torch.randn(1, num_reduce_ops).to( DEVICE ),
                 requires_grad=True )
-        self.alphas_normal = Variable( 
-                torch.tensor( [[0.1,0.1,0.4,0.4]] ).to( DEVICE ),
-                requires_grad=True )
-        self.alphas_reduce = Variable( 
-                torch.tensor( [[0.5, 0.5]] ).to( DEVICE ),
-                requires_grad=True )
+        #self.alphas_normal = Variable( 
+        #        torch.tensor( [[0.1,0.1,0.4,0.4]] ).to( DEVICE ),
+        #        requires_grad=True )
+        #self.alphas_reduce = Variable( 
+        #        torch.tensor( [[0.5, 0.5]] ).to( DEVICE ),
+        #        requires_grad=True )
         self._arch_parameters = [
             self.alphas_normal,
             self.alphas_reduce,
         ]
         return self._arch_parameters
+
+    def finalize_model( self ):
+        normal_shape = self.alphas_normal.shape
+        reduce_shape = self.alphas_reduce.shape
+        weights_normal = torch.zeros( normal_shape,
+                requires_grad=False ).to( DEVICE )
+        weights_reduce = torch.zeros( reduce_shape,
+                requires_grad=False ).to( DEVICE )
+        for i in range( len( self.alphas_normal ) ):
+            best_op = torch.argmax( self.alphas_normal[i] )
+            weights_normal[ i, best_op ] = 1
+            best_op = torch.argmax( self.alphas_reduce[i] )
+            weights_reduce[ i, best_op ] = 1
+        self.alphas_normal = weights_normal
+        self.alphas_reduce = weights_reduce
 
 class DANN( nn.Module ):
 

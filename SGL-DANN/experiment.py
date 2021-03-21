@@ -77,6 +77,8 @@ class Experiment(object):
                 self.experiment_dir )
         self.val_stats = SGLStats( self.sgl, 'validation',
                 self.experiment_dir )
+        self.final_train_stats = SGLStats( self.sgl, 'final_train',
+                self.experiment_dir )
         self.test_stats = SGLStats( self.sgl, 'test',
                 self.experiment_dir )
 
@@ -323,14 +325,12 @@ class Experiment(object):
         
         self.val_stats.update_stats()
 
-
     def test(self):
         # import pdb; pdb.set_trace()
         self.sgl.reset_stats()
         self.sgl_pretrain.reset_stats()
         self.sgl_pretrain.eval()
         self.sgl.eval()
-        val_loss = 0
         N = min( len( self.src_test_queue ),
                 len( self.tgt_test_queue ) ) // 1
         src_test_queue_iter = iter( self.src_test_queue )

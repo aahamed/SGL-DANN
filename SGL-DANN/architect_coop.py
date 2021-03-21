@@ -172,7 +172,10 @@ class ArchitectDA( ArchitectSGL ):
         nn.utils.clip_grad_norm_(self.model1.arch_parameters(), 
                 self.args.grad_clip)
         self.optimizer.step()
+        self.optimizer1.step()
   
     def _backward_step( self, src_imgs, src_labels, tgt_imgs, alpha ):
-        loss = self.model._loss( src_imgs, src_labels, tgt_imgs, alpha )
+        loss0 = self.model._loss( src_imgs, src_labels, tgt_imgs, alpha )
+        loss1 = self.model1._loss( src_imgs, src_labels, tgt_imgs, alpha )
+        loss = loss0 + loss1
         loss.backward()

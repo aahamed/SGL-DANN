@@ -5,7 +5,7 @@ import os
 from torch import nn
 from file_utils import *
 from plot import plot_loss_acc
-from constants import IS_ARCH_FIXED
+from constants import *
 
 
 class SGL( object ):
@@ -144,6 +144,11 @@ class SGL( object ):
         # skip for fixed architecture
         if IS_ARCH_FIXED():
             return
+        if ARCH_TYPE == 'darts-simple':
+            for i in range( self.N ):
+                normal = self.models[i].fe.alphas_normal[0]
+                reduce = self.models[i].fe.alphas_reduce[0]
+                logging.info( f'model {i} alphas_normal: {normal} alphas_reduce: {reduce}' )
         for i in range( self.N ):
             logging.info( f'genotype {i} = {self.models[i].genotype()}' )
 
@@ -156,7 +161,11 @@ class SGL( object ):
             save_path = os.path.join( self.exp_dir, f'{save_name}_{i}.pt' )
             model_dict = self.models[i].state_dict()
             opt_dict = self.optimizers[i].state_dict()
-            state_dict = {'model': model_dict, 'optimizer': opt_dict}
+            alphas_normal = self.models[i].fe.alphas_normal
+            alphas_reduce = self.models[i].fe.alphas_reduce
+            state_dict = { 'model': model_dict, 'optimizer': opt_dict,
+                    'alphas_normal': alphas_normal,
+                    'alphas_reduce': alphas_reduce }
             torch.save(state_dict, save_path)
 
     def load_models( self, load_name ):
@@ -165,6 +174,12 @@ class SGL( object ):
             state_dict = torch.load( load_path )
             self.models[i].load_state_dict( state_dict['model'] )
             self.optimizers[i].load_state_dict( state_dict['optimizer'] )
+            self.models[i].fe.alphas_normal = state_dict['alphas_normal']
+            self.models[i].fe.alphas_reduce = state_dict['alphas_reduce']
+
+    def finalize_models( self ):
+        for i in range( self.N ):
+            self.models[i].fe.finalize_model()
 
 class SGLStats( object ):
     '''
