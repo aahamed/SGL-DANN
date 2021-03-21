@@ -20,6 +20,14 @@ python train_search_sgl.py --epochs=5 --pretrain_steps=2  --batch_size=32 --src_
 ```
 * --save specifies the save name for this experiment
 
+### Search on CIFAR10 ( src domain ) to CIFAR10_HSV ( target domain )
+* Perform small group learning with DANN model.  
+* Note, only first order search is supported.
+```
+ python train_search_sgl.py --epochs=20 --pretrain_steps=5  --batch_size=64 --learning_rate=.001 --src_set=cifar10 --tgt_set=cifar10_hsv --save=my_exp
+```
+* --save specifies the save name for this experiment
+
 ## Files
 
 ### New Files
