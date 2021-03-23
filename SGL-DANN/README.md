@@ -3,8 +3,9 @@
 * This project applies the small group learning framework to the problem of domain adaptation. In this  
 implementation each learner is an adversarial network.  
 
-SGL paper: https://arxiv.org/abs/2012.12502  
-DANN paper: https://arxiv.org/abs/1409.7495  
+* SGL paper: https://arxiv.org/abs/2012.12502  
+* DANN paper: https://arxiv.org/abs/1409.7495
+* Our paper: https://github.com/aahamed/SGL-DANN/blob/main/SGL-DANN/ECE269_Final_Report.pdf
 
 ## Usage
 
@@ -12,11 +13,14 @@ DANN paper: https://arxiv.org/abs/1409.7495
 * The logs, stats, plots and saved models would be stored in `./experiment_data/my_exp` dir. This can be configured in `contants.py`
 * To resume an ongoing experiment, simply run the same command again. It will load the latest stats and models and resume training.
 
+## Data Preparation
+* In order to run the code on MNIST-M dataset you must first download the MNIST-M dataset from [here](https://drive.google.com/drive/folders/0B_tExHiYS-0vR2dNZEU4NGlSSW8). You must then pass the location of the download to the train_search_sgl.py script. By default the script searches for the dataset in `../../data` relative to the script.
+
 ### Search on MNIST ( src domain ) to MNIST-M ( target domain )
 * Perform small group learning with DANN model.  
 * Note, only first order search is supported.
 ```
-python train_search_sgl.py --epochs=5 --pretrain_steps=2  --batch_size=32 --src_set=mnist --tgt_set=mnistm --save=my_exp
+python train_search_sgl.py  --batch_size=64 --src_set=mnist --tgt_set=mnistm --epochs=20 --pretrain_steps=2 --data=<path/to/mnist-m> --save=my_exp
 ```
 * --save specifies the save name for this experiment
 
